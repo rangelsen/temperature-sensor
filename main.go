@@ -3,6 +3,7 @@ package main
 import (
     "os"
     "temperature-sensor/temp"
+    "time"
 )
 
 func main() {
@@ -14,10 +15,10 @@ func main() {
         panic(err)
     }
 
-    tempReadings := make(chan float64, 1)
+    tempReadings := make(chan temp.TemperatureReading, 1)
     tempMeasurements := make(chan temp.TemperatureMeasurement, 1)
 
-    go temp.CalcMeasurement(tempReadings, tempMeasurements)
+    go temp.CalcMeasurement(tempReadings, tempMeasurements, time.Second)
     temp.ReadTemperatures(tempFile, tempReadings)
 }
 
