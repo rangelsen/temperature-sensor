@@ -6,6 +6,12 @@ import (
 	"time"
 )
 
+const (
+	MAX_RAW_READING = 4095
+	MAX_TEMP        = 50
+	MIN_TEMP        = -50
+)
+
 type (
 	TemperatureReading struct {
 		Temperature float64
@@ -16,7 +22,7 @@ type (
 		Time    MeasurementTime `json:"time"`
 		Min     float64         `json:"min"`
 		Max     float64         `json:"max"`
-		Average float64         `json:"average"`
+		Average float64         `json:"avg"`
 	}
 
 	MeasurementTime struct {
@@ -28,11 +34,10 @@ type (
 func CalcMeasurement(tempReadings <-chan TemperatureReading, tempMeasurements chan<- TemperatureMeasurement, postingInterval time.Duration) {
 
 	initial := TemperatureMeasurement{
-		MeasurementTime{time.Now(), time.Now()}, math.MaxFloat64, -math.MaxFloat64, 0,
+		MeasurementTime{time.Now().UTC(), time.Now().UTC()}, math.MaxFloat64, -math.MaxFloat64, 0,
 	}
 
 	var accumulated TemperatureMeasurement = initial
-
 	var readingCount uint = 0
 
 	for {
@@ -61,20 +66,22 @@ func accumulateReadings(acc TemperatureMeasurement, reading TemperatureReading, 
 
 	average := (acc.Average*float64(readingCount) + reading.Temperature) / float64(readingCount+1)
 
+	min := math.Min(acc.Min, reading.Temperature)
+	max := math.Max(acc.Max, reading.Temperature)
+
 	return TemperatureMeasurement{
 		MeasurementTime{startTime, reading.TimeStamp},
-		math.Min(acc.Min, reading.Temperature),
-		math.Max(acc.Max, reading.Temperature),
-		average,
+		math.Round(min) / 100,
+		math.Round(max) / 100,
+		math.Round(average) / 100,
 	}
 }
 
 func shouldPost(acc TemperatureMeasurement, threshold time.Duration) bool {
-
 	return acc.Time.End.Sub(acc.Time.Start) >= threshold
 }
 
-func ReadTemperatures(temps []float64, tempReadings chan<- TemperatureReading) {
+func ReadTemperatures(temps []uint, tempReadings chan<- TemperatureReading) {
 
 	ticker := time.NewTicker(time.Millisecond * 100)
 
@@ -82,14 +89,22 @@ func ReadTemperatures(temps []float64, tempReadings chan<- TemperatureReading) {
 		<-ticker.C
 		temp := temps[0]
 		temps = temps[1:]
-		return temp
+		return rawTempToFloat(temp)
 	}
 
 	for range temps {
 
 		temp := getTemperature()
-		timeStamp := time.Now()
+		timeStamp := time.Now().UTC()
 
 		tempReadings <- TemperatureReading{temp, timeStamp}
 	}
+}
+
+func rawTempToFloat(raw uint) float64 {
+	return lerp(float64(raw)/MAX_RAW_READING, MIN_TEMP, MAX_TEMP)
+}
+
+func lerp(val float64, min float64, max float64) float64 {
+	return val*(max-min) + min
 }
