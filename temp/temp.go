@@ -1,12 +1,8 @@
 package temp
 
 import (
-    "bufio"
-    "os"
     "fmt"
-    "strconv"
     "time"
-    "strings"
     "math"
 )
 
@@ -32,9 +28,11 @@ type (
 
 func CalcMeasurement(tempReadings <-chan TemperatureReading, tempMeasurements chan<- TemperatureMeasurement, postingInterval time.Duration) {
 
-    var accumulated = TemperatureMeasurement {
+    initial := TemperatureMeasurement {
         MeasurementTime { time.Now(), time.Now() }, math.MaxFloat64, -math.MaxFloat64, 0,
     }
+
+    var accumulated TemperatureMeasurement = initial
 
     var readingCount uint = 0
 
@@ -47,9 +45,9 @@ func CalcMeasurement(tempReadings <-chan TemperatureReading, tempMeasurements ch
 
         if shouldPost(accumulated, postingInterval) {
 
-            fmt.Println("Time passed. Posting: ", accumulated)
             tempMeasurements <- accumulated
             readingCount = 0
+            accumulated = initial
         }
     }
 }
@@ -77,32 +75,23 @@ func shouldPost(acc TemperatureMeasurement, threshold time.Duration) bool {
     return acc.Time.End.Sub(acc.Time.Start) >= threshold
 }
 
-func ReadTemperatures(tempFile *os.File, tempReadings chan<- TemperatureReading) {
-
-    tempScanner := bufio.NewScanner(tempFile)
-    tempScanner.Split(bufio.ScanLines)
+func ReadTemperatures(temps []float64, tempReadings chan<- TemperatureReading) {
 
     ticker := time.NewTicker(time.Millisecond * 100)
   
-    for {
-        temp := getTemperature(tempScanner, ticker)
+    getTemperature := func() float64 {
+        <-ticker.C
+        temp := temps[0]
+        temps = temps[1:]
+        return temp
+    }
+
+    for range temps {
+
+        temp := getTemperature()
         timeStamp := time.Now()
 
         tempReadings <- TemperatureReading { temp, timeStamp }
-    }
-}
-
-func getTemperature(tempScanner *bufio.Scanner, ticker *time.Ticker) float64 {
-
-    // block until ticker signals ready
-    <-ticker.C
-    tempScanner.Scan()
-    tempStr := strings.TrimSpace(tempScanner.Text())
-
-    if temp, err := strconv.ParseInt(tempStr, 10, 32); err == nil {
-        return float64(temp)
-    } else {
-        panic(err)
     }
 }
 
