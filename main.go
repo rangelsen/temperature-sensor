@@ -13,30 +13,56 @@ import (
 	"time"
 )
 
+type (
+	OutboundMeasurements struct {
+		Measurements chan temp.TemperatureMeasurement
+		missing      []temp.TemperatureMeasurement
+	}
+
+	Serializable interface {
+		Json() []byte
+	}
+)
+
 func main() {
 
 	temps := getTempsFromFile("temperature.txt")
 
 	tempReadings := make(chan temp.TemperatureReading, 1)
-	tempMeasurements := make(chan temp.TemperatureMeasurement, 1)
+	outbound := OutboundMeasurements{
+		make(chan temp.TemperatureMeasurement, 1),
+		make([]temp.TemperatureMeasurement, 0),
+	}
 
-	go temp.CalcMeasurement(tempReadings, tempMeasurements, time.Second)
+	go temp.CalcMeasurement(tempReadings, outbound.Measurements, time.Second)
 	go temp.ReadTemperatures(temps, tempReadings)
-	publishMeasurements(tempMeasurements)
+	publishMeasurements(&outbound)
 }
 
-func publishMeasurements(tempMeasurements <-chan temp.TemperatureMeasurement) {
+func publishMeasurements(outbound *OutboundMeasurements) {
 
 	for {
-		measurement := <-tempMeasurements
+		measurement := <-outbound.Measurements
 		fmt.Println("measurement:", measurement)
 
-		body, _ := json.Marshal(measurement)
-		buf := bytes.NewBuffer(body)
-		resp, _ := http.Post("http://localhost:5000/api/temperature", "application/json", buf)
-		fmt.Println(resp.Status)
-		resp.Body.Close()
+		json, _ := json.Marshal(measurement)
+		postSuccess := postJson(json, "http://localhost:5000/api/temperature")
+		outbound.PublishMissing()
+
+		if !postSuccess {
+			fmt.Println("Failed post to /api/temperature. Adding to missing")
+			outbound.AddMissing(measurement)
+		}
 	}
+}
+
+func postJson(json []byte, url string) bool {
+
+	buf := bytes.NewBuffer(json)
+	resp, _ := http.Post(url, "application/json", buf)
+	defer resp.Body.Close()
+
+	return resp.StatusCode != 500
 }
 
 func getTempsFromFile(filePath string) []uint {
@@ -50,7 +76,6 @@ func getTempsFromFile(filePath string) []uint {
 
 	tempScanner := bufio.NewScanner(tempFile)
 	tempScanner.Split(bufio.ScanLines)
-
 	return fileContentToUintSlice(tempScanner)
 }
 
@@ -70,4 +95,30 @@ func fileContentToUintSlice(tempScanner *bufio.Scanner) []uint {
 	}
 
 	return temps
+}
+
+func (outbound *OutboundMeasurements) AddMissing(measurement temp.TemperatureMeasurement) {
+
+	outbound.missing = append(outbound.missing, measurement)
+
+	if len(outbound.missing) > 10 {
+		outbound.missing = outbound.missing[1:11]
+	}
+}
+
+func (outbound *OutboundMeasurements) PublishMissing() {
+
+	if len(outbound.missing) == 0 {
+		return
+	}
+
+	json, _ := json.Marshal(outbound.missing)
+	fmt.Println("Publishing missing measurements:", string(json))
+
+	if postJson(json, "http://localhost:5000/api/temperature/missing") {
+		fmt.Println("Missing successfully published")
+		outbound.missing = outbound.missing[:0]
+	} else {
+		fmt.Println("Missing failed")
+	}
 }

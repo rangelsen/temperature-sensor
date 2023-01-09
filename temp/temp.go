@@ -47,7 +47,7 @@ func CalcMeasurement(tempReadings <-chan TemperatureReading, tempMeasurements ch
 		accumulated = accumulateReadings(accumulated, reading, readingCount)
 		readingCount++
 
-		if shouldPost(accumulated, postingInterval) {
+		if shouldPublish(accumulated, postingInterval) {
 
 			tempMeasurements <- accumulated
 			readingCount = 0
@@ -77,7 +77,7 @@ func accumulateReadings(acc TemperatureMeasurement, reading TemperatureReading, 
 	}
 }
 
-func shouldPost(acc TemperatureMeasurement, threshold time.Duration) bool {
+func shouldPublish(acc TemperatureMeasurement, threshold time.Duration) bool {
 	return acc.Time.End.Sub(acc.Time.Start) >= threshold
 }
 
