@@ -1,10 +1,10 @@
 package temp
 
 import (
+	"bufio"
+	"strings"
 	"testing"
 	"time"
-    "bufio"
-    "strings"
 )
 
 type (
@@ -16,7 +16,7 @@ type (
 	}
 )
 
-func TestReadingsProcessorRun(t *testing.T) {
+func Test_ReadingsProcessor_Run(t *testing.T) {
 
 	// Arrange
 	readings := make(chan TemperatureReading, 2)
@@ -56,7 +56,7 @@ func TestReadingsProcessorRun(t *testing.T) {
 	}
 }
 
-func TestAccumulateAverage(t *testing.T) {
+func Test_accumulateAverage(t *testing.T) {
 
 	// Arrange
 	testData := []accumAvgTest{
@@ -78,37 +78,37 @@ func TestAccumulateAverage(t *testing.T) {
 	}
 }
 
-func TestSensorStart(t *testing.T) {
+func Test_Sensor_Start(t *testing.T) {
 
-    // Arrange
-    temperatures := strings.NewReader("3515\n 685\n2495")
-    temps := []uint{3515, 685, 2495}
-    scanner := bufio.NewScanner(temperatures)
-    scanner.Split(bufio.ScanLines)
+	// Arrange
+	temperatures := strings.NewReader("3515\n 685\n2495")
+	temps := []uint{3515, 685, 2495}
+	scanner := bufio.NewScanner(temperatures)
+	scanner.Split(bufio.ScanLines)
 
-    readings := make(chan TemperatureReading, 1)
-    
-    sensor := Sensor{
-        TempSource: scanner,
-        Ticker: time.NewTicker(time.Millisecond * 100),
-        Quit: make(chan bool, 1),
-    }
+	readings := make(chan TemperatureReading, 1)
 
-    // Act
-    go sensor.Start(readings)
-    
-    for _, temp := range temps {
-        select {
-        case <-sensor.Quit:
-            return
-        case reading := <-readings:
-            actual := reading.Temperature
-            expected := rawTempToFloat(temp)
+	sensor := Sensor{
+		TempSource: scanner,
+		Ticker:     time.NewTicker(time.Millisecond * 100),
+		Quit:       make(chan bool, 1),
+	}
 
-            // Assert
-            if expected != actual {
-                t.Errorf("expected: %f, actual: %f", expected, actual)
-            }
-        }
-    }
+	// Act
+	go sensor.Start(readings)
+
+	for _, temp := range temps {
+		select {
+		case <-sensor.Quit:
+			return
+		case reading := <-readings:
+			actual := reading.Temperature
+			expected := rawTempToFloat(temp)
+
+			// Assert
+			if expected != actual {
+				t.Errorf("expected: %f, actual: %f", expected, actual)
+			}
+		}
+	}
 }
