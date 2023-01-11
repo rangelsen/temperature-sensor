@@ -19,12 +19,12 @@ type (
 	Sensor struct {
 		TempSource *bufio.Scanner
 		Ticker     *time.Ticker
-        Quit chan bool
+		Quit       chan bool
 	}
 
 	ReadingsProcessor struct {
 		Readings           chan TemperatureReading
-        Quit chan bool
+		Quit               chan bool
 		readingCount       uint
 		measurement        TemperatureMeasurement
 		PublishingInterval time.Duration
@@ -53,19 +53,19 @@ func (processor *ReadingsProcessor) Run(measurements chan<- TemperatureMeasureme
 	processor.reset()
 
 	for {
-        select {
-        case <-processor.Quit:
-            return
-        default:
-            reading := <-processor.Readings
-            fmt.Println("reading: ", reading)
-            processor.accumulate(reading)
+		select {
+		case <-processor.Quit:
+			return
+		default:
+			reading := <-processor.Readings
+			fmt.Println("reading: ", reading)
+			processor.accumulate(reading)
 
-            if processor.shouldPublish() {
-                measurements <- processor.measurement
-                processor.reset()
-            }
-        }
+			if processor.shouldPublish() {
+				measurements <- processor.measurement
+				processor.reset()
+			}
+		}
 	}
 }
 
@@ -73,13 +73,13 @@ func (processor *ReadingsProcessor) reset() {
 
 	processor.readingCount = 0
 	processor.measurement = TemperatureMeasurement{
-        Time: MeasurementTime{
-            time.Now().UTC(),
-            time.Now().UTC(),
-        },
-        Min: math.MaxFloat64,
-        Max: -math.MaxFloat64,
-        Average: 0,
+		Time: MeasurementTime{
+			time.Now().UTC(),
+			time.Now().UTC(),
+		},
+		Min:     math.MaxFloat64,
+		Max:     -math.MaxFloat64,
+		Average: 0,
 	}
 }
 
@@ -100,9 +100,9 @@ func (processor *ReadingsProcessor) accumulate(reading TemperatureReading) {
 	processor.readingCount++
 	processor.measurement = TemperatureMeasurement{
 		MeasurementTime{startTime, reading.TimeStamp},
-        round2(min),
-        round2(max),
-        round2(average),
+		round2(min),
+		round2(max),
+		round2(average),
 	}
 }
 
@@ -121,7 +121,7 @@ func (sensor Sensor) Start(readings chan<- TemperatureReading) {
 		readings <- TemperatureReading{temp, timeStamp}
 	}
 
-    sensor.Quit <- true
+	sensor.Quit <- true
 }
 
 func (sensor Sensor) getTemperature() float64 {
@@ -147,9 +147,9 @@ func lerp(val float64, min float64, max float64) float64 {
 }
 
 func accumulateAverage(avg float64, val float64, n uint) float64 {
-	return avg + (val - avg) / float64(n+1)
+	return avg + (val-avg)/float64(n+1)
 }
 
 func round2(val float64) float64 {
-    return math.Round(val*100)/100
+	return math.Round(val*100) / 100
 }

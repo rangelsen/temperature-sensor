@@ -15,7 +15,7 @@ type (
 	OutboundMeasurements struct {
 		Measurements chan temp.TemperatureMeasurement
 		missing      []temp.TemperatureMeasurement
-        Quit chan bool
+		Quit         chan bool
 	}
 )
 
@@ -24,52 +24,49 @@ func main() {
 	tempScanner, file := getTempScanner("temperature.txt")
 	defer file.Close()
 
-	readings := make(chan temp.TemperatureReading, 1)
-    quit := make(chan bool, 1)
-
 	tempSensor := temp.Sensor{
 		TempSource: tempScanner,
-		Ticker:     time.NewTicker(time.Millisecond * 10),
-        Quit: quit,
+		Ticker:     time.NewTicker(time.Millisecond * 100),
+		Quit:       make(chan bool, 1),
 	}
 
 	processor := temp.ReadingsProcessor{
-		Readings:           readings,
+		Readings:           make(chan temp.TemperatureReading, 1),
 		PublishingInterval: time.Second * 2,
-        Quit: make(chan bool, 1),
+		Quit:               make(chan bool, 1),
 	}
 
 	outbound := OutboundMeasurements{
-		make(chan temp.TemperatureMeasurement, 1),
-		make([]temp.TemperatureMeasurement, 0),
-        make(chan bool, 1),
+		Measurements: make(chan temp.TemperatureMeasurement, 1),
+		missing:      make([]temp.TemperatureMeasurement, 0),
+		Quit:         make(chan bool, 1),
 	}
 
 	go processor.Run(outbound.Measurements)
-	go tempSensor.Start(readings)
+	go tempSensor.Start(processor.Readings)
 	go publishMeasurements(&outbound)
-    stop(quit, &outbound, &processor)
+	stop(tempSensor, outbound, processor)
 }
 
 func publishMeasurements(outbound *OutboundMeasurements) {
 
 	for {
-        select {
-        case <-outbound.Quit:
-            return
-        default:
-            measurement := <-outbound.Measurements
-            fmt.Println("measurement:", measurement)
+		select {
+		case <-outbound.Quit:
+			return
+		default:
+			measurement := <-outbound.Measurements
+			fmt.Println("measurement:", measurement)
 
-            json, _ := json.Marshal(measurement)
-            postSuccess := postJson(json, "http://localhost:5000/api/temperature")
-            outbound.PublishMissing()
+			json, _ := json.Marshal(measurement)
+			postSuccess := postJson(json, "http://localhost:5000/api/temperature")
+			outbound.PublishMissing()
 
-            if !postSuccess {
-                fmt.Println("Failed post to /api/temperature. Adding to missing")
-                outbound.AddMissing(measurement)
-            }
-        }
+			if !postSuccess {
+				fmt.Println("Failed post to /api/temperature. Adding to missing")
+				outbound.AddMissing(measurement)
+			}
+		}
 	}
 }
 
@@ -121,9 +118,9 @@ func (outbound *OutboundMeasurements) PublishMissing() {
 	}
 }
 
-func stop(quit <-chan bool, outbound *OutboundMeasurements, processor *temp.ReadingsProcessor) {
+func stop(sensor temp.Sensor, outbound OutboundMeasurements, processor temp.ReadingsProcessor) {
 
-    <-quit
-    outbound.Quit <- true
-    processor.Quit <- true
+	<-sensor.Quit
+	outbound.Quit <- true
+	processor.Quit <- true
 }
