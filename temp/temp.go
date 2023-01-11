@@ -4,9 +4,9 @@ import (
 	"bufio"
 	"fmt"
 	"math"
+	"strconv"
+	"strings"
 	"time"
-    "strings"
-    "strconv"
 )
 
 const (
@@ -113,7 +113,7 @@ func (sensor Sensor) readNext() uint {
 
 	tempStr := strings.TrimSpace(sensor.TempSource.Text())
 	temp, _ := strconv.ParseUint(tempStr, 10, 16)
-    return uint(temp)
+	return uint(temp)
 }
 
 func (sensor Sensor) Start(readings chan<- TemperatureReading) {

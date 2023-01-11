@@ -20,28 +20,28 @@ type (
 
 func main() {
 
-    tempScanner, file := getTempScanner("temperature.txt")
-    defer file.Close()
+	tempScanner, file := getTempScanner("temperature.txt")
+	defer file.Close()
 
-    readings := make(chan temp.TemperatureReading, 1)
+	readings := make(chan temp.TemperatureReading, 1)
 
-    tempSensor := temp.Sensor{
-        TempSource: tempScanner,
-        Ticker: time.NewTicker(time.Millisecond*100),
-    }
+	tempSensor := temp.Sensor{
+		TempSource: tempScanner,
+		Ticker:     time.NewTicker(time.Millisecond * 100),
+	}
 
-    processor := temp.ReadingsProcessor{
-        Readings: readings,
-        PublishingInterval: time.Second*2,
-    }
+	processor := temp.ReadingsProcessor{
+		Readings:           readings,
+		PublishingInterval: time.Second * 2,
+	}
 
 	outbound := OutboundMeasurements{
-        make(chan temp.TemperatureMeasurement, 1),
+		make(chan temp.TemperatureMeasurement, 1),
 		make([]temp.TemperatureMeasurement, 0),
 	}
 
-    go processor.Run(outbound.Measurements)
-    go tempSensor.Start(readings)
+	go processor.Run(outbound.Measurements)
+	go tempSensor.Start(readings)
 	publishMeasurements(&outbound)
 }
 
@@ -81,7 +81,7 @@ func getTempScanner(filePath string) (*bufio.Scanner, *os.File) {
 
 	tempScanner := bufio.NewScanner(tempFile)
 	tempScanner.Split(bufio.ScanLines)
-    return tempScanner, tempFile
+	return tempScanner, tempFile
 }
 
 func (outbound *OutboundMeasurements) AddMissing(measurement temp.TemperatureMeasurement) {
