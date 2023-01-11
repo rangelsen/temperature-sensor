@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"strconv"
-	"strings"
 	"temperature-sensor/temp"
 	"time"
 )
@@ -18,24 +16,32 @@ type (
 		Measurements chan temp.TemperatureMeasurement
 		missing      []temp.TemperatureMeasurement
 	}
-
-	Serializable interface {
-		Json() []byte
-	}
 )
 
 func main() {
 
-	temps := getTempsFromFile("temperature.txt")
+    tempScanner, file := getTempScanner("temperature.txt")
+    defer file.Close()
 
-	tempReadings := make(chan temp.TemperatureReading, 1)
+    readings := make(chan temp.TemperatureReading, 1)
+
+    tempSensor := temp.Sensor{
+        TempSource: tempScanner,
+        Ticker: time.NewTicker(time.Millisecond*100),
+    }
+
+    processor := temp.ReadingsProcessor{
+        Readings: readings,
+        PublishingInterval: time.Second*2,
+    }
+
 	outbound := OutboundMeasurements{
-		make(chan temp.TemperatureMeasurement, 1),
+        make(chan temp.TemperatureMeasurement, 1),
 		make([]temp.TemperatureMeasurement, 0),
 	}
 
-	go temp.CalcMeasurement(tempReadings, outbound.Measurements, time.Second)
-	go temp.ReadTemperatures(temps, tempReadings)
+    go processor.Run(outbound.Measurements)
+    go tempSensor.Start(readings)
 	publishMeasurements(&outbound)
 }
 
@@ -65,10 +71,9 @@ func postJson(json []byte, url string) bool {
 	return resp.StatusCode != 500
 }
 
-func getTempsFromFile(filePath string) []uint {
+func getTempScanner(filePath string) (*bufio.Scanner, *os.File) {
 
 	tempFile, err := os.Open(filePath)
-	defer tempFile.Close()
 
 	if err != nil {
 		panic(err)
@@ -76,25 +81,7 @@ func getTempsFromFile(filePath string) []uint {
 
 	tempScanner := bufio.NewScanner(tempFile)
 	tempScanner.Split(bufio.ScanLines)
-	return fileContentToUintSlice(tempScanner)
-}
-
-func fileContentToUintSlice(tempScanner *bufio.Scanner) []uint {
-
-	var temps []uint
-
-	for tempScanner.Scan() {
-
-		tempStr := strings.TrimSpace(tempScanner.Text())
-
-		if temp, err := strconv.ParseUint(tempStr, 10, 16); err == nil {
-			temps = append(temps, uint(temp))
-		} else {
-			panic(err)
-		}
-	}
-
-	return temps
+    return tempScanner, tempFile
 }
 
 func (outbound *OutboundMeasurements) AddMissing(measurement temp.TemperatureMeasurement) {

@@ -1,9 +1,12 @@
 package temp
 
 import (
+	"bufio"
 	"fmt"
 	"math"
 	"time"
+    "strings"
+    "strconv"
 )
 
 const (
@@ -13,6 +16,18 @@ const (
 )
 
 type (
+	Sensor struct {
+		TempSource *bufio.Scanner
+		Ticker     *time.Ticker
+	}
+
+	ReadingsProcessor struct {
+		Readings           chan TemperatureReading
+		readingCount       uint
+		measurement        TemperatureMeasurement
+		PublishingInterval time.Duration
+	}
+
 	TemperatureReading struct {
 		Temperature float64
 		TimeStamp   time.Time
@@ -31,45 +46,47 @@ type (
 	}
 )
 
-func CalcMeasurement(tempReadings <-chan TemperatureReading, tempMeasurements chan<- TemperatureMeasurement, postingInterval time.Duration) {
+func (processor *ReadingsProcessor) Run(measurements chan<- TemperatureMeasurement) {
 
-	initial := TemperatureMeasurement{
-		MeasurementTime{time.Now().UTC(), time.Now().UTC()}, math.MaxFloat64, -math.MaxFloat64, 0,
-	}
-
-	var accumulated TemperatureMeasurement = initial
-	var readingCount uint = 0
+	processor.reset()
 
 	for {
-
-		reading := <-tempReadings
+		reading := <-processor.Readings
 		fmt.Println("reading: ", reading)
-		accumulated = accumulateReadings(accumulated, reading, readingCount)
-		readingCount++
+		processor.accumulate(reading)
 
-		if shouldPublish(accumulated, postingInterval) {
+		if processor.shouldPublish() {
 
-			tempMeasurements <- accumulated
-			readingCount = 0
-			accumulated = initial
+			measurements <- processor.measurement
+			processor.reset()
 		}
 	}
 }
 
-func accumulateReadings(acc TemperatureMeasurement, reading TemperatureReading, readingCount uint) TemperatureMeasurement {
+func (processor *ReadingsProcessor) reset() {
 
-	startTime := acc.Time.Start
+	processor.readingCount = 0
+	processor.measurement = TemperatureMeasurement{
+		MeasurementTime{time.Now().UTC(), time.Now().UTC()}, math.MaxFloat64, -math.MaxFloat64, 0,
+	}
+}
 
-	if readingCount == 0 {
+func (processor *ReadingsProcessor) accumulate(reading TemperatureReading) {
+
+	currMeasurement := processor.measurement
+	startTime := currMeasurement.Time.Start
+
+	if processor.readingCount == 0 {
 		startTime = reading.TimeStamp
 	}
 
-	average := (acc.Average*float64(readingCount) + reading.Temperature) / float64(readingCount+1)
+	average := accumulateAverage(currMeasurement.Average, reading.Temperature, processor.readingCount)
 
-	min := math.Min(acc.Min, reading.Temperature)
-	max := math.Max(acc.Max, reading.Temperature)
+	min := math.Min(currMeasurement.Min, reading.Temperature)
+	max := math.Max(currMeasurement.Max, reading.Temperature)
 
-	return TemperatureMeasurement{
+	processor.readingCount++
+	processor.measurement = TemperatureMeasurement{
 		MeasurementTime{startTime, reading.TimeStamp},
 		math.Round(min) / 100,
 		math.Round(max) / 100,
@@ -77,27 +94,35 @@ func accumulateReadings(acc TemperatureMeasurement, reading TemperatureReading, 
 	}
 }
 
-func shouldPublish(acc TemperatureMeasurement, threshold time.Duration) bool {
-	return acc.Time.End.Sub(acc.Time.Start) >= threshold
+func (processor ReadingsProcessor) shouldPublish() bool {
+
+	startTime := processor.measurement.Time.Start
+	endTime := processor.measurement.Time.End
+
+	return endTime.Sub(startTime) >= processor.PublishingInterval
 }
 
-func ReadTemperatures(temps []uint, tempReadings chan<- TemperatureReading) {
+func (sensor Sensor) getTemperature() float64 {
 
-	ticker := time.NewTicker(time.Millisecond * 100)
+	<-sensor.Ticker.C
+	temp := sensor.readNext()
+	return rawTempToFloat(temp)
+}
 
-	getTemperature := func() float64 {
-		<-ticker.C
-		temp := temps[0]
-		temps = temps[1:]
-		return rawTempToFloat(temp)
-	}
+func (sensor Sensor) readNext() uint {
 
-	for range temps {
+	tempStr := strings.TrimSpace(sensor.TempSource.Text())
+	temp, _ := strconv.ParseUint(tempStr, 10, 16)
+    return uint(temp)
+}
 
-		temp := getTemperature()
+func (sensor Sensor) Start(readings chan<- TemperatureReading) {
+
+	for sensor.TempSource.Scan() {
+
+		temp := sensor.getTemperature()
 		timeStamp := time.Now().UTC()
-
-		tempReadings <- TemperatureReading{temp, timeStamp}
+		readings <- TemperatureReading{temp, timeStamp}
 	}
 }
 
@@ -107,4 +132,8 @@ func rawTempToFloat(raw uint) float64 {
 
 func lerp(val float64, min float64, max float64) float64 {
 	return val*(max-min) + min
+}
+
+func accumulateAverage(avg float64, val float64, n uint) float64 {
+	return (avg*float64(n) + val) / float64(n+1)
 }
