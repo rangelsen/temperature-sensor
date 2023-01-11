@@ -19,6 +19,7 @@ type (
 	Sensor struct {
 		TempSource *bufio.Scanner
 		Ticker     *time.Ticker
+        Quit chan bool
 	}
 
 	ReadingsProcessor struct {
@@ -112,6 +113,17 @@ func (processor ReadingsProcessor) shouldPublish() bool {
 	return endTime.Sub(startTime) >= processor.PublishingInterval
 }
 
+func (sensor Sensor) Start(readings chan<- TemperatureReading) {
+
+	for sensor.TempSource.Scan() {
+		temp := sensor.getTemperature()
+		timeStamp := time.Now().UTC()
+		readings <- TemperatureReading{temp, timeStamp}
+	}
+
+    sensor.Quit <- true
+}
+
 func (sensor Sensor) getTemperature() float64 {
 
 	<-sensor.Ticker.C
@@ -124,15 +136,6 @@ func (sensor Sensor) readNext() uint {
 	tempStr := strings.TrimSpace(sensor.TempSource.Text())
 	temp, _ := strconv.ParseUint(tempStr, 10, 16)
 	return uint(temp)
-}
-
-func (sensor Sensor) Start(readings chan<- TemperatureReading) {
-
-	for sensor.TempSource.Scan() {
-		temp := sensor.getTemperature()
-		timeStamp := time.Now().UTC()
-		readings <- TemperatureReading{temp, timeStamp}
-	}
 }
 
 func rawTempToFloat(raw uint) float64 {

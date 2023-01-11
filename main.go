@@ -15,6 +15,7 @@ type (
 	OutboundMeasurements struct {
 		Measurements chan temp.TemperatureMeasurement
 		missing      []temp.TemperatureMeasurement
+        Quit chan bool
 	}
 )
 
@@ -24,41 +25,51 @@ func main() {
 	defer file.Close()
 
 	readings := make(chan temp.TemperatureReading, 1)
+    quit := make(chan bool, 1)
 
 	tempSensor := temp.Sensor{
 		TempSource: tempScanner,
-		Ticker:     time.NewTicker(time.Millisecond * 100),
+		Ticker:     time.NewTicker(time.Millisecond * 10),
+        Quit: quit,
 	}
 
 	processor := temp.ReadingsProcessor{
 		Readings:           readings,
 		PublishingInterval: time.Second * 2,
+        Quit: make(chan bool, 1),
 	}
 
 	outbound := OutboundMeasurements{
 		make(chan temp.TemperatureMeasurement, 1),
 		make([]temp.TemperatureMeasurement, 0),
+        make(chan bool, 1),
 	}
 
 	go processor.Run(outbound.Measurements)
 	go tempSensor.Start(readings)
-	publishMeasurements(&outbound)
+	go publishMeasurements(&outbound)
+    stop(quit, &outbound, &processor)
 }
 
 func publishMeasurements(outbound *OutboundMeasurements) {
 
 	for {
-		measurement := <-outbound.Measurements
-		fmt.Println("measurement:", measurement)
+        select {
+        case <-outbound.Quit:
+            return
+        default:
+            measurement := <-outbound.Measurements
+            fmt.Println("measurement:", measurement)
 
-		json, _ := json.Marshal(measurement)
-		postSuccess := postJson(json, "http://localhost:5000/api/temperature")
-		outbound.PublishMissing()
+            json, _ := json.Marshal(measurement)
+            postSuccess := postJson(json, "http://localhost:5000/api/temperature")
+            outbound.PublishMissing()
 
-		if !postSuccess {
-			fmt.Println("Failed post to /api/temperature. Adding to missing")
-			outbound.AddMissing(measurement)
-		}
+            if !postSuccess {
+                fmt.Println("Failed post to /api/temperature. Adding to missing")
+                outbound.AddMissing(measurement)
+            }
+        }
 	}
 }
 
@@ -108,4 +119,11 @@ func (outbound *OutboundMeasurements) PublishMissing() {
 	} else {
 		fmt.Println("Missing failed")
 	}
+}
+
+func stop(quit <-chan bool, outbound *OutboundMeasurements, processor *temp.ReadingsProcessor) {
+
+    <-quit
+    outbound.Quit <- true
+    processor.Quit <- true
 }
