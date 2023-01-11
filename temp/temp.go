@@ -23,6 +23,7 @@ type (
 
 	ReadingsProcessor struct {
 		Readings           chan TemperatureReading
+        Quit chan bool
 		readingCount       uint
 		measurement        TemperatureMeasurement
 		PublishingInterval time.Duration
@@ -51,15 +52,19 @@ func (processor *ReadingsProcessor) Run(measurements chan<- TemperatureMeasureme
 	processor.reset()
 
 	for {
-		reading := <-processor.Readings
-		fmt.Println("reading: ", reading)
-		processor.accumulate(reading)
+        select {
+        case <-processor.Quit:
+            return
+        default:
+            reading := <-processor.Readings
+            fmt.Println("reading: ", reading)
+            processor.accumulate(reading)
 
-		if processor.shouldPublish() {
-
-			measurements <- processor.measurement
-			processor.reset()
-		}
+            if processor.shouldPublish() {
+                measurements <- processor.measurement
+                processor.reset()
+            }
+        }
 	}
 }
 
@@ -67,7 +72,13 @@ func (processor *ReadingsProcessor) reset() {
 
 	processor.readingCount = 0
 	processor.measurement = TemperatureMeasurement{
-		MeasurementTime{time.Now().UTC(), time.Now().UTC()}, math.MaxFloat64, -math.MaxFloat64, 0,
+        Time: MeasurementTime{
+            time.Now().UTC(),
+            time.Now().UTC(),
+        },
+        Min: math.MaxFloat64,
+        Max: -math.MaxFloat64,
+        Average: 0,
 	}
 }
 
@@ -98,7 +109,6 @@ func (processor ReadingsProcessor) shouldPublish() bool {
 
 	startTime := processor.measurement.Time.Start
 	endTime := processor.measurement.Time.End
-
 	return endTime.Sub(startTime) >= processor.PublishingInterval
 }
 
@@ -119,7 +129,6 @@ func (sensor Sensor) readNext() uint {
 func (sensor Sensor) Start(readings chan<- TemperatureReading) {
 
 	for sensor.TempSource.Scan() {
-
 		temp := sensor.getTemperature()
 		timeStamp := time.Now().UTC()
 		readings <- TemperatureReading{temp, timeStamp}
