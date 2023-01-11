@@ -3,7 +3,6 @@ package temp
 import (
     "testing"
     "time"
-    "math"
 )
 
 type (
@@ -41,7 +40,7 @@ func TestReadingsProcessorRun(t *testing.T) {
         },
         Min: r2.Temperature,
         Max: r1.Temperature,
-        Average: math.Round(average) / 100,
+        Average: round2(average),
     }
 
     // Act
