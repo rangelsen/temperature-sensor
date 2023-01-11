@@ -61,7 +61,7 @@ func TestAccumulateAverage(t *testing.T) {
     testData := []accumAvgTest{
         accumAvgTest{0, 1, 0, 1},
         accumAvgTest{-2, 2, 1, 0},
-        accumAvgTest{8.4, 3.2, 4, 2.32},
+        accumAvgTest{8.4, 3.2, 4, 7.36},
     }
 
     // Act

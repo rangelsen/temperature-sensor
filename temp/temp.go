@@ -99,9 +99,9 @@ func (processor *ReadingsProcessor) accumulate(reading TemperatureReading) {
 	processor.readingCount++
 	processor.measurement = TemperatureMeasurement{
 		MeasurementTime{startTime, reading.TimeStamp},
-		math.Round(min) / 100,
-		math.Round(max) / 100,
-		math.Round(average) / 100,
+        round2(min),
+        round2(max),
+        round2(average),
 	}
 }
 
@@ -144,5 +144,9 @@ func lerp(val float64, min float64, max float64) float64 {
 }
 
 func accumulateAverage(avg float64, val float64, n uint) float64 {
-	return (avg*float64(n) + val) / float64(n+1)
+	return avg + (val - avg) / float64(n+1)
+}
+
+func round2(val float64) float64 {
+    return math.Round(val*100)/100
 }

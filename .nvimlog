@@ -1,0 +1,1 @@
+WARN  2023-01-11T10:58:18.342 41253 log_path_init:96: Failed to create directory /Users/roy/.cache/nvim for writing logs: Unknown system error 1
