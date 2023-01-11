@@ -3,6 +3,8 @@ package temp
 import (
 	"testing"
 	"time"
+    "bufio"
+    "strings"
 )
 
 type (
@@ -74,4 +76,42 @@ func TestAccumulateAverage(t *testing.T) {
 			t.Errorf("expected: %+v, actual: %+v", expected, actual)
 		}
 	}
+}
+
+func TestSensorStart(t *testing.T) {
+
+    // Arrange
+    temperatures := strings.NewReader("3515\n 685\n2495")
+    temps := []uint{3515, 685, 2495}
+    scanner := bufio.NewScanner(temperatures)
+    scanner.Split(bufio.ScanLines)
+
+    readings := make(chan TemperatureReading, 1)
+    
+    sensor := Sensor{
+        TempSource: scanner,
+        Ticker: time.NewTicker(time.Millisecond * 100),
+        Quit: make(chan bool, 1),
+    }
+
+    // Act
+    go sensor.Start(readings)
+    
+    var i = 0
+
+    for {
+        select {
+        case <-sensor.Quit:
+            return
+        case reading := <-readings:
+            actual := reading.Temperature
+            expected := rawTempToFloat(temps[i])
+
+            // Assert
+            if expected != actual {
+                t.Errorf("expected: %f, actual: %f", expected, actual)
+            }
+            i++
+        }
+    }
 }
