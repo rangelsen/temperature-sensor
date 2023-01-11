@@ -97,21 +97,18 @@ func TestSensorStart(t *testing.T) {
     // Act
     go sensor.Start(readings)
     
-    var i = 0
-
-    for {
+    for _, temp := range temps {
         select {
         case <-sensor.Quit:
             return
         case reading := <-readings:
             actual := reading.Temperature
-            expected := rawTempToFloat(temps[i])
+            expected := rawTempToFloat(temp)
 
             // Assert
             if expected != actual {
                 t.Errorf("expected: %f, actual: %f", expected, actual)
             }
-            i++
         }
     }
 }
