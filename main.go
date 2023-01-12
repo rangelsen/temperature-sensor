@@ -25,30 +25,27 @@ func main() {
 	tempScanner, file := getTempScanner("temperature.txt")
 	defer file.Close()
 
-	tempSensor := temp.Sensor{
-		TempSource: tempScanner,
-		Ticker:     time.NewTicker(time.Millisecond * 100),
-		Quit:       make(chan bool, 1),
-	}
+	baseURL := "http://localhost:5000"
 
-	processor := temp.ReadingsProcessor{
-		Readings:           make(chan temp.TemperatureReading, 1),
-		PublishingInterval: time.Second * 2,
-		Quit:               make(chan bool, 1),
-	}
-
-	outbound := OutboundMeasurements{
-		Measurements:   make(chan temp.TemperatureMeasurement, 1),
-		missing:        make([]temp.TemperatureMeasurement, 0),
-		Quit:           make(chan bool, 1),
-		temperatureURL: "http://localhost:5000/api/temperature",
-		missingURL:     "http://localhost:5000/api/temperature/missing",
-	}
+	tempSensor := temp.NewSensor(tempScanner, time.NewTicker(time.Millisecond*100))
+	processor := temp.NewReadingsProcessor(time.Minute * 2)
+	outbound := NewOutboundMeasurements(baseURL+"/api/temperature", baseURL+"/api/temperature/missing")
 
 	go processor.Run(outbound.Measurements)
 	go tempSensor.Start(processor.Readings)
 	go outbound.dispatchMesurements()
 	stopWhenDone(tempSensor, outbound, processor)
+}
+
+func NewOutboundMeasurements(tempURL, missingURL string) OutboundMeasurements {
+
+	return OutboundMeasurements{
+		Measurements:   make(chan temp.TemperatureMeasurement, 1),
+		missing:        make([]temp.TemperatureMeasurement, 0),
+		Quit:           make(chan bool, 1),
+		temperatureURL: tempURL,
+		missingURL:     missingURL,
+	}
 }
 
 func (outbound *OutboundMeasurements) dispatchMesurements() {

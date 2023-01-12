@@ -48,6 +48,15 @@ type (
 	}
 )
 
+func NewReadingsProcessor(publishingInterval time.Duration) ReadingsProcessor {
+
+	return ReadingsProcessor{
+		Readings:           make(chan TemperatureReading, 1),
+		PublishingInterval: publishingInterval,
+		Quit:               make(chan bool, 1),
+	}
+}
+
 func (processor *ReadingsProcessor) Run(measurements chan<- TemperatureMeasurement) {
 
 	processor.reset()
@@ -111,6 +120,15 @@ func (processor ReadingsProcessor) shouldPublish() bool {
 	startTime := processor.measurement.Time.Start
 	endTime := processor.measurement.Time.End
 	return endTime.Sub(startTime) >= processor.PublishingInterval
+}
+
+func NewSensor(tempScanner *bufio.Scanner, ticker *time.Ticker) Sensor {
+
+	return Sensor{
+		TempSource: tempScanner,
+		Ticker:     time.NewTicker(time.Millisecond * 100),
+		Quit:       make(chan bool, 1),
+	}
 }
 
 func (sensor Sensor) Start(readings chan<- TemperatureReading) {
